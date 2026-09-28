@@ -1,0 +1,101 @@
+# Supabase CLI config for local development — Bougsk backend.
+# Real secrets (service role key, Razorpay keys, webhook secret) are NEVER
+# committed here. Set them with:
+#   supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...
+#   supabase secrets set RAZORPAY_KEY_ID=...
+#   supabase secrets set RAZORPAY_KEY_SECRET=...
+#   supabase secrets set RAZORPAY_WEBHOOK_SECRET=...
+#   supabase secrets set STOREFRONT_ORIGIN=https://<storefront-domain>
+#   supabase secrets set ADMIN_ORIGIN=https://<admin-panel-domain>
+#   supabase secrets set RESEND_API_KEY=...
+#   supabase secrets set NOTIFICATIONS_FROM_EMAIL="Bougsk <orders@yourdomain.com>"
+#   supabase secrets set ADMIN_EMAIL=you@yourdomain.com
+# against the linked project, once one exists. RESEND_API_KEY is optional —
+# functions/_shared/email.ts logs and skips sending if it's unset, so
+# nothing breaks before Resend is wired up.
+# SUPABASE_URL and SUPABASE_ANON_KEY are injected automatically by the
+# Supabase platform into every Edge Function — no need to set them.
+
+project_id = "bougsk"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = false
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = false
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"
+inspector_port = 8083
+
+# Local dev only — do not point this at a live project without review.
+[analytics]
+enabled = false
+
+# ---------------------------------------------------------------------
+# Edge Functions — per-function JWT verification.
+#
+# verify_jwt = true means Supabase requires a valid signed JWT (anon key,
+# a user's session token, or the service role key — all are JWTs) as the
+# Authorization bearer before the request even reaches our code. It is
+# NOT the same as "requires login": the storefront's anon key already
+# satisfies it, so public/anonymous functions can safely leave it on.
+#
+#   - create-order, verify-payment, track-order: public/anonymous
+#     checkout and lookup flows, called with the storefront's anon key.
+#   - razorpay-webhook: MUST be false — Razorpay's server calls this with
+#     its own HMAC signature (verified inside the function itself), never
+#     a Supabase JWT of any kind.
+#   - refund-order: admin panel only, called with a signed-in admin's
+#     session JWT. The function itself does a second, explicit is_admin()
+#     check — this is defense in depth, not a substitute for it.
+#   - release-stale-orders: triggered only by pg_cron/pg_net (see
+#     migration 0007), which authenticates with the service role key as
+#     its bearer token — a valid JWT, so verify_jwt = true still works.
+#   - update-order-status: admin panel only, same pattern as refund-order.
+# ---------------------------------------------------------------------
+[functions.create-order]
+verify_jwt = true
+
+[functions.verify-payment]
+verify_jwt = true
+
+[functions.track-order]
+verify_jwt = true
+
+[functions.razorpay-webhook]
+verify_jwt = false
+
+[functions.refund-order]
+verify_jwt = true
+
+[functions.release-stale-orders]
+verify_jwt = true
+
+[functions.update-order-status]
+verify_jwt = true

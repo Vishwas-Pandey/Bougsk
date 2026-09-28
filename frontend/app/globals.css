@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* Design tokens — generated from docs/tokens.json (Bougsk Brand Bible). Do not hand-edit values; update tokens.json and regenerate. */
+:root {
+  --color-paper: #FBF6EE;
+  --color-ink: #211D1A;
+  --color-charcoal: #2A2622;
+  --color-charcoal-ink: #FBF6EE;
+  --color-gold: #C6A15B;
+  --color-gold-deep: #A9823F;
+  --color-wine: #6E2A3A;
+  --color-sand: #E4D8C3;
+  --color-sage: #5B6C58;
+  --color-white: #FFFFFF;
+  --color-error: #B3423A;
+  --color-disabled: #A09788;
+
+  --radius-full: 9999px;
+  --radius-lg: 24px;
+  --radius-md: 12px;
+  --radius-sm: 6px;
+
+  --shadow-sm: 0 1px 2px rgba(33, 29, 26, 0.06);
+  --shadow-md: 0 4px 16px rgba(33, 29, 26, 0.10);
+  --shadow-lg: 0 12px 32px rgba(33, 29, 26, 0.16);
+
+  --ease-candle: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-candle: 300ms;
+}
+
+@theme inline {
+  --color-paper: var(--color-paper);
+  --color-ink: var(--color-ink);
+  --color-charcoal: var(--color-charcoal);
+  --color-charcoal-ink: var(--color-charcoal-ink);
+  --color-gold: var(--color-gold);
+  --color-gold-deep: var(--color-gold-deep);
+  --color-wine: var(--color-wine);
+  --color-sand: var(--color-sand);
+  --color-sage: var(--color-sage);
+  --color-white: var(--color-white);
+  --color-error: var(--color-error);
+  --color-disabled: var(--color-disabled);
+
+  --radius-full: var(--radius-full);
+  --radius-lg: var(--radius-lg);
+  --radius-md: var(--radius-md);
+  --radius-sm: var(--radius-sm);
+
+  --font-display: var(--font-fraunces);
+  --font-body: var(--font-work-sans);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body), sans-serif;
+}
+
+/* Never bold Fraunces beyond weight 500 — Brand Bible §6 */
+.font-display {
+  font-family: var(--font-display), serif;
+  font-weight: 500;
+}
+
+@keyframes flame-flicker {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(0.9); }
+}
+.animate-flame-flicker {
+  animation: flame-flicker 900ms ease-in-out infinite;
+}

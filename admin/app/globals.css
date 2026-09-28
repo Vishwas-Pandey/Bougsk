@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #fbf6ee;
+  --ink: #211d1a;
+  --charcoal: #2a2622;
+  --gold: #c6a15b;
+  --gold-deep: #a9823f;
+  --wine: #6e2a3a;
+  --sand: #e4d8c3;
+  --sage: #5b6c58;
+  --error: #b3423a;
+  --disabled: #a09788;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-charcoal: var(--charcoal);
+  --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
+  --color-wine: var(--wine);
+  --color-sand: var(--sand);
+  --color-sage: var(--sage);
+  --color-white: #ffffff;
+  --color-error: #b3423a;
+  --color-disabled: var(--disabled);
+
+  --font-sans: var(--font-work-sans);
+  --font-display: var(--font-fraunces);
+
+  --text-display-xl: 64px;
+  --text-display-xl--line-height: 1.05;
+  --text-h1: 32px;
+  --text-h1--line-height: 1.2;
+  --text-h3-italic: 21px;
+  --text-h3-italic--line-height: 1.4;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 1.6;
+  --text-body: 15px;
+  --text-body--line-height: 1.6;
+  --text-label-upper: 12px;
+  --text-label-upper--line-height: 1.4;
+
+  --radius-card: 12px;
+  --radius-modal: 12px;
+  --radius-hero: 24px;
+
+  --ease-brand: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-work-sans), "Work Sans", sans-serif;
+}

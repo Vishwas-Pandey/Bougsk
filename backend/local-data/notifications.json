@@ -1,0 +1,51 @@
+[
+  {
+    "id": "38609d6c-f7a1-4e9a-880c-2b9b0ba5ea05",
+    "to": "priya.sharma@example.com",
+    "subject": "Your Bougsk order BOUGSK-1044 is confirmed",
+    "body": "Hi Priya Sharma,\n\nGot it — order BOUGSK-1044 for ₹1,749 is confirmed. We'll write again once it's packed and on its way.\n\n— Bougsk",
+    "sent_at": "2026-09-27T18:51:06.240Z"
+  },
+  {
+    "id": "f3a8f5cb-0016-4860-aca1-5d9f69d4857c",
+    "to": "priya.sharma@example.com",
+    "subject": "Payment received for order BOUGSK-1044",
+    "body": "Hi Priya Sharma,\n\nPayment of ₹1,749 for order BOUGSK-1044 came through. Your GST invoice number is BOUGSK-INV-1044.\n\n— Bougsk",
+    "sent_at": "2026-09-27T18:51:06.240Z"
+  },
+  {
+    "id": "71266cc3-ef5b-4aec-8388-444b6c37cbbd",
+    "to": "priya.sharma@example.com",
+    "subject": "Your Bougsk order BOUGSK-1044 has been packed",
+    "body": "Hi Priya Sharma,\n\nBOUGSK-1044 has been packed by hand and is ready to go. We'll send the tracking details once it leaves us.\n\n— Bougsk",
+    "sent_at": "2026-09-27T18:51:42.766Z"
+  },
+  {
+    "id": "6bcb8a7e-e7a0-4f8c-a725-bc71f64f5025",
+    "to": "priya.sharma@example.com",
+    "subject": "Your Bougsk order BOUGSK-1044 has been packed",
+    "body": "Hi Priya Sharma,\n\nBOUGSK-1044 has been packed by hand and is ready to go. We'll send the tracking details once it leaves us.\n\n— Bougsk",
+    "sent_at": "2026-09-27T18:51:42.783Z"
+  },
+  {
+    "id": "f480e7d6-a5f0-41b2-8e09-dbb8a3836dbe",
+    "to": "priya.sharma@example.com",
+    "subject": "Your Bougsk order BOUGSK-1044 is on its way",
+    "body": "Hi Priya Sharma,\n\nBOUGSK-1044 shipped today with Delhivery. Tracking number: DL1122334455.\n\n— Bougsk",
+    "sent_at": "2026-09-27T18:51:47.795Z"
+  },
+  {
+    "id": "47ddd94a-ab16-4062-ac23-a4eae07e9621",
+    "to": "priya.sharma@example.com",
+    "subject": "Your Bougsk order BOUGSK-1044 is on its way",
+    "body": "Hi Priya Sharma,\n\nBOUGSK-1044 shipped today with Delhivery. Tracking number: DL1122334455.\n\n— Bougsk",
+    "sent_at": "2026-09-27T18:51:47.810Z"
+  },
+  {
+    "id": "745ae2eb-4716-4880-afe8-fae5c21a3857",
+    "to": "priya.sharma@example.com",
+    "subject": "Your Bougsk order BOUGSK-1044 is out for delivery",
+    "body": "Hi Priya Sharma,\n\nBOUGSK-1044 is out for delivery today with Delhivery (DL1122334455).\n\n— Bougsk",
+    "sent_at": "2026-09-27T18:53:23.646Z"
+  }
+]

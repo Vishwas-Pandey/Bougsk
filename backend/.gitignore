@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.tsbuildinfo
+
+# Real Supabase secrets never belong in git — set with `supabase secrets set`.
+.env
+.env.local
+!.env*.example
