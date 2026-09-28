@@ -513,7 +513,7 @@ export const siteSettings: SiteSetting[] = [
     key: "banner_text",
     value: "Free shipping over ₹1,999. Handpoured in small batches.",
   },
-  { key: "instagram_url", value: "https://instagram.com/bougsk" },
+  { key: "instagram_url", value: "https://instagram.com/bougsk.co" },
   // GST registration is complete. 5% is the current rate for candles
   // (HSN 3406) under the GST 2.0 reform effective 22 Sept 2025 — confirm
   // with an accountant whether hand-poured candles qualify for the lower
