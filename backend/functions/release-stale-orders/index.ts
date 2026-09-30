@@ -11,9 +11,12 @@
 // 'pending' after a 30-minute window gets its stock handed back and is
 // marked cancelled, so a real customer isn't blocked by a phantom hold.
 //
-// Not public-facing — no CORS handling needed. Supabase's default
-// verify_jwt gate (see config.toml) is what protects this endpoint; the
-// cron job authenticates with the service role key as its bearer token.
+// Not public-facing — no CORS handling needed. verify_jwt = true (see
+// config.toml) only proves the caller presented SOME valid JWT, and the
+// publicly-known anon key satisfies that too — it does not by itself
+// prove the caller is the cron job. The explicit check below is what
+// actually restricts this to the service role key the cron job
+// authenticates with (see migration 0007_v1_2_cron_jobs.sql).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -25,6 +28,10 @@ const STALE_AFTER_MINUTES = 30;
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+  }
+
+  if (req.headers.get("Authorization") !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {

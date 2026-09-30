@@ -10,13 +10,20 @@ import { sendPaymentConfirmedEmail } from "../_shared/email.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET")!;
-const ALLOWED_ORIGIN = Deno.env.get("STOREFRONT_ORIGIN") ?? "*";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+// Same fail-closed policy as create-order/track-order: no "*" fallback.
+// If STOREFRONT_ORIGIN isn't configured, omit the header entirely rather
+// than silently allowing every origin.
+const ALLOWED_ORIGIN = Deno.env.get("STOREFRONT_ORIGIN");
+if (!ALLOWED_ORIGIN) {
+  console.error("verify-payment: STOREFRONT_ORIGIN is not set — refusing to advertise any CORS origin");
+}
+
+const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+if (ALLOWED_ORIGIN) corsHeaders["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN;
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -71,7 +78,8 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
 
   if (findError) {
-    return jsonResponse({ error: "Failed to look up order", detail: findError.message }, 500);
+    console.error("verify-payment: order lookup failed", findError.message);
+    return jsonResponse({ error: "Failed to look up order" }, 500);
   }
   if (!order) {
     return jsonResponse({ error: "Order not found for this Razorpay order id" }, 404);
@@ -90,7 +98,8 @@ Deno.serve(async (req: Request) => {
   // migration 0004).
   const { data: gstInvoiceNumber, error: invoiceSeqError } = await supabase.rpc("generate_gst_invoice_number");
   if (invoiceSeqError) {
-    return jsonResponse({ error: "Failed to generate GST invoice number", detail: invoiceSeqError.message }, 500);
+    console.error("verify-payment: GST invoice number generation failed", invoiceSeqError.message);
+    return jsonResponse({ error: "Failed to generate GST invoice number" }, 500);
   }
 
   const { error: updateError } = await supabase
@@ -105,7 +114,8 @@ Deno.serve(async (req: Request) => {
     .eq("id", order.id);
 
   if (updateError) {
-    return jsonResponse({ error: "Failed to update order", detail: updateError.message }, 500);
+    console.error("verify-payment: order update failed", updateError.message);
+    return jsonResponse({ error: "Failed to update order" }, 500);
   }
 
   sendPaymentConfirmedEmail({

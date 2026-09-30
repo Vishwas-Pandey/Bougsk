@@ -29,11 +29,11 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RAZORPAY_KEY_ID = Deno.env.get("RAZORPAY_KEY_ID")!;
 const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET")!;
 
-// This function is one of the two callable by anyone unauthenticated, so
-// it must not be scrapable by an arbitrary third-party site. No "*"
-// fallback: if STOREFRONT_ORIGIN isn't configured, we fail safe by simply
-// not sending the CORS header at all (browsers then refuse the
-// cross-origin response) rather than silently allowing every origin.
+// Callable by any signed-in customer, so it must not be scrapable by an
+// arbitrary third-party site. No "*" fallback: if STOREFRONT_ORIGIN isn't
+// configured, we fail safe by simply not sending the CORS header at all
+// (browsers then refuse the cross-origin response) rather than silently
+// allowing every origin.
 const ALLOWED_ORIGIN = Deno.env.get("STOREFRONT_ORIGIN");
 if (!ALLOWED_ORIGIN) {
   console.error("create-order: STOREFRONT_ORIGIN is not set — refusing to advertise any CORS origin");
@@ -157,6 +157,24 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   });
 
+  // Each call opens a real Razorpay order and reserves stock (see
+  // create_order_tx below), so an unrestricted customer could spam this
+  // into a stock-pinning DoS or a wall of abandoned Razorpay orders —
+  // rate-limit by the signed-in user, same check_rate_limit primitive
+  // track-order already uses.
+  const { data: rateAllowed, error: rateError } = await supabase.rpc("check_rate_limit", {
+    p_key: `create-order:user:${userId}`,
+    p_max_attempts: 20,
+    p_window_minutes: 10,
+  });
+  if (rateError) {
+    console.error("create-order: rate limit check failed", rateError.message);
+    return jsonResponse({ error: "Something went wrong. Please try again." }, 500);
+  }
+  if (!rateAllowed) {
+    return jsonResponse({ error: "Too many attempts. Please wait a few minutes and try again." }, 429);
+  }
+
   // Build the order lines from the REAL, current database rows.
   // We never trust a price (or even a product name) the client sends —
   // the client only tells us WHAT and HOW MANY, never how much it costs.
@@ -180,7 +198,8 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (productError) {
-      return jsonResponse({ error: "Failed to load product", detail: productError.message }, 500);
+      console.error("create-order: product lookup failed", productError.message);
+      return jsonResponse({ error: "Failed to load product" }, 500);
     }
     if (!product) {
       return jsonResponse({ error: `Product ${item.product_id} not found` }, 400);
@@ -201,7 +220,8 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (variantError) {
-        return jsonResponse({ error: "Failed to load variant", detail: variantError.message }, 500);
+        console.error("create-order: variant lookup failed", variantError.message);
+        return jsonResponse({ error: "Failed to load variant" }, 500);
       }
       if (!variant || variant.product_id !== product.id) {
         return jsonResponse({ error: `Variant ${item.variant_id} not found for ${product.name}` }, 400);
@@ -251,7 +271,8 @@ Deno.serve(async (req: Request) => {
     .in("key", ["shipping_fee_inr", "tax_rate_percent"]);
 
   if (settingsError) {
-    return jsonResponse({ error: "Failed to load site settings", detail: settingsError.message }, 500);
+    console.error("create-order: site settings lookup failed", settingsError.message);
+    return jsonResponse({ error: "Failed to load site settings" }, 500);
   }
 
   const settingsMap = new Map((settingsRows ?? []).map((row) => [row.key, row.value]));
@@ -294,7 +315,8 @@ Deno.serve(async (req: Request) => {
     if (match) {
       return jsonResponse({ error: `${match[1]} is out of stock` }, 400);
     }
-    return jsonResponse({ error: "Failed to create order", detail: txError.message }, 500);
+    console.error("create-order: create_order_tx failed", txError.message);
+    return jsonResponse({ error: "Failed to create order" }, 500);
   }
 
   const result = txResult as {
@@ -330,7 +352,8 @@ Deno.serve(async (req: Request) => {
         updated_at: new Date().toISOString(),
       })
       .eq("id", result.order_id);
-    return jsonResponse({ error: "Failed to create Razorpay order", detail: `${err}` }, 502);
+    console.error("create-order: Razorpay order creation failed", err);
+    return jsonResponse({ error: "Failed to create Razorpay order" }, 502);
   }
 
   const { error: attachError } = await supabase
@@ -339,7 +362,8 @@ Deno.serve(async (req: Request) => {
     .eq("id", result.order_id);
 
   if (attachError) {
-    return jsonResponse({ error: "Failed to link Razorpay order", detail: attachError.message }, 500);
+    console.error("create-order: failed to link Razorpay order", attachError.message);
+    return jsonResponse({ error: "Failed to link Razorpay order" }, 500);
   }
 
   // Fire-and-forget: an email delivery hiccup must never fail an order that

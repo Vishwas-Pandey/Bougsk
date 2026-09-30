@@ -73,7 +73,9 @@ export default async function ProductPage({
       <PageViewTracker event="product_viewed" data={{ product_id: product.id }} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        // Escape "<" so a product name/description containing "</script>"
+        // can't break out of this tag — JSON.stringify alone doesn't do this.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
 
       <div className="grid gap-10 lg:grid-cols-2">
