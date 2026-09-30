@@ -78,6 +78,9 @@ enabled = false
 #     migration 0007), which authenticates with the service role key as
 #     its bearer token — a valid JWT, so verify_jwt = true still works.
 #   - update-order-status: admin panel only, same pattern as refund-order.
+#   - manage-admins: admin panel only, same pattern as refund-order —
+#     the function itself further requires is_super_admin(), not just
+#     is_admin().
 # ---------------------------------------------------------------------
 [functions.create-order]
 verify_jwt = true
@@ -98,4 +101,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.update-order-status]
+verify_jwt = true
+
+[functions.manage-admins]
 verify_jwt = true

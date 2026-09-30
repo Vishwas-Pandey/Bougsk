@@ -61,10 +61,56 @@ async function getSession(): Promise<AdminSession | null> {
   return data.session ? { email: data.session.user.email ?? "" } : null;
 }
 
+export interface CurrentAdmin {
+  id: string;
+  email: string;
+  is_super_admin: boolean;
+}
+
+// The logged-in admin's own row — used to decide whether to show the
+// "manage admins" section (super-admin only) and to label the account
+// settings section with their email.
+async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
+  if (!supabase) return null;
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from("admins")
+    .select("id, email, is_super_admin")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data;
+}
+
+// Self-service only — Supabase's updateUser call always acts on the
+// currently authenticated session, so this can never change anyone
+// else's password.
+async function updateOwnPassword(newPassword: string): Promise<{ error: string | null }> {
+  if (!supabase) return { error: "Accounts aren't available in local dev mode yet." };
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  return { error: error?.message ?? null };
+}
+
+async function sendPasswordResetEmail(email: string): Promise<{ error: string | null }> {
+  if (!supabase) return { error: "Accounts aren't available in local dev mode yet." };
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  // Same message whether the email exists or not — never confirm/deny
+  // which emails are on the admin allow-list.
+  return { error: error ? "Could not send the reset email. Try again shortly." : null };
+}
+
 export const supabaseAdminClient = {
   auth: {
     signInWithPassword,
     signOut,
     getSession,
+    getCurrentAdmin,
+    updateOwnPassword,
+    sendPasswordResetEmail,
   },
 };
