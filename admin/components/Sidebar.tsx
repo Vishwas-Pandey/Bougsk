@@ -55,7 +55,7 @@ export function Sidebar() {
   return (
     <>
       <header className="md:hidden flex items-center justify-between bg-charcoal px-5 py-4">
-        <Logo tone="paper" className="text-h3-italic" />
+        <Logo className="h-10" />
         <button
           type="button"
           aria-label="Toggle navigation"
@@ -80,7 +80,7 @@ export function Sidebar() {
 
       <aside className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:justify-between bg-charcoal px-5 py-8 min-h-screen sticky top-0">
         <div>
-          <Logo tone="paper" className="text-h1 block px-4 mb-8" />
+          <Logo className="h-20 block px-4 mb-8" />
           <NavLinks />
         </div>
         <button

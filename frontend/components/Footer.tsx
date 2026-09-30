@@ -10,7 +10,7 @@ export function Footer() {
     <footer className="mt-24 bg-charcoal text-charcoal-ink">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-4">
         <div className="md:col-span-2">
-          <Logo tone="paper" className="text-xl" />
+          <Logo className="h-16" />
           <p className="mt-3 flex items-start gap-2 text-sm text-charcoal-ink/70">
             <PinIcon className="mt-0.5 h-4 w-4 shrink-0" />
             Hand-poured in small batches, {businessInfo.address.city}.

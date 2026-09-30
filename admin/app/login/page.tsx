@@ -35,7 +35,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-paper px-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
-          <Logo tone="wine" className="text-h1 justify-center" />
+          <Logo className="h-24" />
           <p className="text-body text-ink/60 mt-2">
             Sign in to manage the storefront.
           </p>
