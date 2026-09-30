@@ -17,6 +17,8 @@ import {
   logOrderDelivered,
   logRefundConfirmed,
 } from "./localNotifications";
+import { isSupabaseConfigured } from "./supabaseAdminClient";
+import { fetchRealOrders, callUpdateOrderStatus, callRefundOrder } from "./realOrders";
 import {
   auditLogs as seedAuditLogs,
   categories as seedCategories,
@@ -108,16 +110,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [orderItems, setOrderItems] = useState<OrderItem[]>(seedOrderItems);
 
   // The seed arrays above render immediately so the dashboard/orders list
-  // never flashes empty; this then swaps in whatever's actually in the
-  // shared file (backend/local-data/orders.json, pre-seeded with the same
-  // demo orders) — real orders placed on the storefront, plus any admin
-  // edits from a previous session, all live there.
+  // never flashes empty; this then swaps in the real thing. With a
+  // Supabase project connected, that's the actual `orders`/`order_items`
+  // tables (RLS's admin-full-access policy covers this read). Without
+  // one, it falls back to whatever's in the shared local JSON file
+  // (backend/local-data/orders.json) — real orders placed on the
+  // storefront's local mock checkout, plus any admin edits from a
+  // previous session.
+  const refetchOrders = useCallback(async () => {
+    if (isSupabaseConfigured) {
+      const real = await fetchRealOrders();
+      setOrders(real.orders);
+      setOrderItems(real.orderItems);
+      return;
+    }
+    const shared = await fetchSharedOrders();
+    if (shared.orders.length === 0) return;
+    setOrders(shared.orders);
+    setOrderItems(shared.order_items);
+  }, []);
+
+  // Mount-time load is inlined (rather than calling refetchOrders, which
+  // the mutation callbacks below reuse) so the setState calls happen
+  // directly in this effect's own async continuation — cleaner for the
+  // set-state-in-effect lint rule to reason about than a call into a
+  // separately-memoized function it'd have to trace into.
   useEffect(() => {
-    fetchSharedOrders().then((shared) => {
+    (async () => {
+      if (isSupabaseConfigured) {
+        const real = await fetchRealOrders();
+        setOrders(real.orders);
+        setOrderItems(real.orderItems);
+        return;
+      }
+      const shared = await fetchSharedOrders();
       if (shared.orders.length === 0) return;
       setOrders(shared.orders);
       setOrderItems(shared.order_items);
-    });
+    })().catch((err) => console.error("Failed to load orders", err));
   }, []);
   const [settings, setSettings] = useState<SiteSetting[]>(seedSiteSettings);
   const [auditLogs] = useState<AdminAuditLog[]>(seedAuditLogs);
@@ -208,6 +238,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // updates local state and persists/notifies afterward.
   const updateOrderStatus = useCallback(
     (id: string, status: OrderStatus) => {
+      if (isSupabaseConfigured) {
+        // Real backend: update-order-status writes the audit log row and
+        // sends the matching customer email itself (see
+        // backend/functions/update-order-status/index.ts) — refetch
+        // afterward rather than guessing the resulting row shape locally.
+        callUpdateOrderStatus(id, status)
+          .then(refetchOrders)
+          .catch((err) => {
+            console.error("Failed to update order status", err);
+            alert(err instanceof Error ? err.message : "Failed to update order status.");
+          });
+        return;
+      }
+
       const updated = orders.find((o) => o.id === id);
       if (!updated) return;
       const next = { ...updated, order_status: status };
@@ -215,10 +259,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => prev.map((o) => (o.id === id ? next : o)));
       void persistOrder(next);
 
-      // Real backend: this is the update-order-status Edge Function's job
-      // (see backend/functions/update-order-status/index.ts) — it sends
-      // the matching email itself. Locally, log the same content so it's
-      // visible on /notifications without a Resend account.
+      // Local mock stand-in for the real backend's email — see above.
       const notify =
         status === "packed"
           ? logOrderPacked
@@ -231,11 +272,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 : null;
       if (notify) void notify(next);
     },
-    [orders]
+    [orders, refetchOrders]
   );
 
   const updateOrderShipping = useCallback(
     (id: string, courier_name: string, tracking_number: string) => {
+      if (isSupabaseConfigured) {
+        const current = orders.find((o) => o.id === id);
+        if (!current) return;
+        // update-order-status always requires order_status in its payload
+        // (it's a general status+shipping updater) — pass the order's
+        // current status through unchanged so this call only touches
+        // courier_name/tracking_number.
+        callUpdateOrderStatus(id, current.order_status, courier_name, tracking_number)
+          .then(refetchOrders)
+          .catch((err) => {
+            console.error("Failed to update shipping details", err);
+            alert(err instanceof Error ? err.message : "Failed to update shipping details.");
+          });
+        return;
+      }
+
       const updated = orders.find((o) => o.id === id);
       if (!updated) return;
       const next = { ...updated, courier_name, tracking_number };
@@ -243,11 +300,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => prev.map((o) => (o.id === id ? next : o)));
       void persistOrder(next);
     },
-    [orders]
+    [orders, refetchOrders]
   );
 
   const cancelOrder = useCallback(
     (id: string) => {
+      if (isSupabaseConfigured) {
+        callUpdateOrderStatus(id, "cancelled")
+          .then(refetchOrders)
+          .catch((err) => {
+            console.error("Failed to cancel order", err);
+            alert(err instanceof Error ? err.message : "Failed to cancel order.");
+          });
+        return;
+      }
+
       const updated = orders.find((o) => o.id === id);
       if (!updated) return;
       const next = { ...updated, order_status: "cancelled" as const };
@@ -255,11 +322,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => prev.map((o) => (o.id === id ? next : o)));
       void persistOrder(next);
     },
-    [orders]
+    [orders, refetchOrders]
   );
 
   const refundOrder = useCallback(
     (id: string, amount?: number, reason?: string) => {
+      if (isSupabaseConfigured) {
+        // refund-order calls Razorpay's refund API and, for a pre-shipment
+        // order, cancels it + releases stock itself — see
+        // backend/functions/refund-order/index.ts.
+        callRefundOrder(id, amount, reason)
+          .then(refetchOrders)
+          .catch((err) => {
+            console.error("Failed to refund order", err);
+            alert(err instanceof Error ? err.message : "Failed to refund order.");
+          });
+        return;
+      }
+
       const order = orders.find((o) => o.id === id);
       if (!order) return;
 
@@ -314,7 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       void isFull; // reserved for when refund_status distinguishes "partial" vs "completed" server-side
     },
-    [orders, orderItems, productVariants]
+    [orders, orderItems, productVariants, refetchOrders]
   );
 
   const updateSetting = useCallback(
