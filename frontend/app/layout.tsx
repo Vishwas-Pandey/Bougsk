@@ -3,6 +3,7 @@ import { Fraunces, Work_Sans } from "next/font/google";
 import "./globals.css";
 import { CartProvider } from "@/lib/cart-context";
 import { ToastProvider } from "@/lib/toast-context";
+import { AuthProvider } from "@/lib/auth-context";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { CartDrawer } from "@/components/CartDrawer";
@@ -42,13 +43,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${fraunces.variable} ${workSans.variable} h-full`}>
       <body className="flex min-h-full flex-col bg-paper text-ink antialiased">
         <ToastProvider>
-          <CartProvider>
-            <Nav />
-            <main className="flex-1">{children}</main>
-            <Footer />
-            <CartDrawer />
-            <ToastViewport />
-          </CartProvider>
+          <AuthProvider>
+            <CartProvider>
+              <Nav />
+              <main className="flex-1">{children}</main>
+              <Footer />
+              <CartDrawer />
+              <ToastViewport />
+            </CartProvider>
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>

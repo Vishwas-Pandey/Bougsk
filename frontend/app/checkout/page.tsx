@@ -15,6 +15,7 @@ import { track } from "@/lib/analytics";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { createRealOrder, verifyRealPayment } from "@/lib/realCheckout";
 import { openRazorpayCheckout, RazorpayDismissedError } from "@/lib/razorpayCheckout";
+import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 
 const INDIAN_STATES = [
@@ -37,6 +38,7 @@ export default function CheckoutPage() {
   const { lines, subtotalInr, clearCart } = useCart();
   const { showToast } = useToast();
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -59,11 +61,24 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Browsing and the cart stay open to anyone — signing in is only
+  // required here, at checkout (create-order enforces this server-side
+  // too, see backend/functions/create-order/index.ts).
+  useEffect(() => {
+    if (isSupabaseConfigured && !authLoading && !user) {
+      router.replace("/login?redirect=/checkout");
+    }
+  }, [authLoading, user, router]);
+
   const shippingFeeInr =
     subtotalInr >= siteSettings.free_shipping_threshold_inr ? 0 : siteSettings.shipping_fee_inr;
   const taxableAmountInr = subtotalInr;
   const taxAmountInr = Math.round((taxableAmountInr * siteSettings.tax_rate_percent) / 100);
   const total = taxableAmountInr + taxAmountInr + shippingFeeInr;
+
+  if (isSupabaseConfigured && (authLoading || !user)) {
+    return <div className="mx-auto max-w-2xl px-4 py-24 sm:px-6" />;
+  }
 
   if (lines.length === 0) {
     return (
@@ -76,10 +91,14 @@ export default function CheckoutPage() {
     );
   }
 
+  // Pre-fills from the signed-in account until the customer types their
+  // own — see the Email field's value below, which uses this same fallback.
+  const effectiveEmail = email || user?.email || "";
+
   function validate(): boolean {
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = "Enter your full name.";
-    if (!isValidEmail(email)) next.email = "Enter a valid email address.";
+    if (!isValidEmail(effectiveEmail)) next.email = "Enter a valid email address.";
     if (!isValidPhone(phone)) next.phone = "Enter a 10-digit Indian mobile number.";
     if (!shipping.line1.trim()) next.line1 = "Enter your address.";
     if (!shipping.city.trim()) next.city = "Enter your city.";
@@ -117,7 +136,7 @@ export default function CheckoutPage() {
         const created = await createRealOrder({
           lines,
           customerName: name,
-          customerEmail: email,
+          customerEmail: effectiveEmail,
           customerPhone: phone,
           shippingAddress,
           billingAddress,
@@ -132,7 +151,7 @@ export default function CheckoutPage() {
           keyId: created.razorpay_key_id,
           razorpayOrderId: created.razorpay_order_id,
           customerName: name,
-          customerEmail: email,
+          customerEmail: effectiveEmail,
           customerPhone: phone,
         });
 
@@ -187,7 +206,7 @@ export default function CheckoutPage() {
     const order = await createOrderAction({
       lines,
       customerName: name,
-      customerEmail: email,
+      customerEmail: effectiveEmail,
       customerPhone: phone,
       shippingAddress,
       billingAddress,
@@ -215,7 +234,7 @@ export default function CheckoutPage() {
               <Input id="name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
             </Field>
             <Field label="Email" htmlFor="email" error={errors.email}>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+              <Input id="email" type="email" value={effectiveEmail} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
             </Field>
             <Field label="Phone" htmlFor="phone" error={errors.phone}>
               <Input id="phone" type="tel" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} />

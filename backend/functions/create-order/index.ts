@@ -13,6 +13,8 @@
 //     read-then-write race on stock_quantity.
 //   - GST/tax calculation, gifting fields, billing address, HSN snapshot.
 //   - CORS is locked to STOREFRONT_ORIGIN with no "*" fallback.
+//   - requires a signed-in customer (migration 0010) — browsing and the
+//     cart stay anonymous, but placing an order does not.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Razorpay from "npm:razorpay@2";
@@ -22,6 +24,7 @@ import { sendOrderConfirmedEmail, sendAdminNewOrderEmail } from "../_shared/emai
 const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL");
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RAZORPAY_KEY_ID = Deno.env.get("RAZORPAY_KEY_ID")!;
 const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET")!;
@@ -85,6 +88,23 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
+
+  // Placing an order requires a signed-in customer (browsing and cart
+  // stay open to anyone) — see migration 0010. The publishable anon key
+  // this function used to accept from any anonymous visitor is not a
+  // user session, so authClient.auth.getUser() correctly rejects it here
+  // too: this is the actual enforcement point, not just a frontend
+  // redirect to /login.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const jwt = authHeader.replace(/^Bearer\s+/i, "");
+  const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+  });
+  const { data: userData, error: userError } = await authClient.auth.getUser(jwt);
+  if (userError || !userData.user) {
+    return jsonResponse({ error: "Sign in to place an order." }, 401);
+  }
+  const userId = userData.user.id;
 
   let payload: CreateOrderPayload;
   try {
@@ -266,6 +286,7 @@ Deno.serve(async (req: Request) => {
     p_tax_rate_percent: taxRatePercent,
     p_razorpay_order_id: null, // attached below, once Razorpay has actually created an order
     p_items: orderLines,
+    p_user_id: userId,
   });
 
   if (txError) {

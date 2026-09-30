@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
 import { Logo } from "./Logo";
-import { CartIcon } from "./icons";
+import { CartIcon, UserIcon } from "./icons";
 
 const links = [
   { href: "/shop", label: "Shop" },
@@ -16,6 +17,7 @@ const links = [
 export function Nav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { itemCount, openDrawer } = useCart();
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b border-sand bg-paper/95 backdrop-blur">
@@ -37,6 +39,14 @@ export function Nav() {
         </nav>
 
         <div className="flex items-center gap-4">
+          <Link
+            href={user ? "/account" : "/login"}
+            aria-label={user ? "Your account" : "Sign in"}
+            className="text-ink/80 transition-colors duration-300 hover:text-wine"
+          >
+            <UserIcon className="h-6 w-6" />
+          </Link>
+
           <button
             type="button"
             onClick={openDrawer}

@@ -79,7 +79,14 @@ async function resolveRealItems(lines: CartLine[]) {
 }
 
 export async function createRealOrder(input: RealCheckoutInput): Promise<CreateOrderResult> {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase is not configured.");
+  if (!supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase is not configured.");
+
+  // create-order requires a signed-in customer (see migration 0010 and
+  // the Edge Function itself) — the publishable anon key alone, used for
+  // every other public call, is not a user session and is rejected.
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error("Sign in to place an order.");
 
   const items = await resolveRealItems(input.lines);
 
@@ -88,7 +95,7 @@ export async function createRealOrder(input: RealCheckoutInput): Promise<CreateO
     headers: {
       "Content-Type": "application/json",
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({
       items,
