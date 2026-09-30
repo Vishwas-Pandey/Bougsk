@@ -12,6 +12,9 @@ import { createOrderAction } from "@/lib/serverOrders";
 import { siteSettings } from "@/lib/mockData";
 import { isValidEmail, isValidPhone, isValidPincode } from "@/lib/validation";
 import { track } from "@/lib/analytics";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import { createRealOrder, verifyRealPayment } from "@/lib/realCheckout";
+import { openRazorpayCheckout, RazorpayDismissedError } from "@/lib/razorpayCheckout";
 import Link from "next/link";
 
 const INDIAN_STATES = [
@@ -100,22 +103,94 @@ export default function CheckoutPage() {
     setSubmitting(true);
     track("payment_initiated", { subtotal_inr: subtotalInr });
 
-    // Real flow: POST to the `create-order` Edge Function (re-prices from `products`,
-    // atomically decrements stock, computes tax, opens a Razorpay order), then open
-    // Razorpay Checkout with the returned order id, then POST the result to
-    // `verify-payment`. No Supabase/Razorpay project is connected yet, so this calls
-    // a Server Action that does the same re-pricing against a shared local JSON file
-    // instead — see lib/serverOrders.ts (also read by the admin app, so the order
-    // shows up there too).
+    const shippingAddress = { line1: shipping.line1, line2: shipping.line2 || undefined, city: shipping.city, state: shipping.state, pincode: shipping.pincode };
+    const billingAddress = billingDiffers
+      ? { line1: billing.line1, line2: billing.line2 || undefined, city: billing.city, state: billing.state, pincode: billing.pincode }
+      : undefined;
+
+    if (isSupabaseConfigured) {
+      // Real flow: create-order re-prices from the live `products` table,
+      // atomically decrements stock, and opens a Razorpay order; Razorpay
+      // Checkout then collects payment against that order id; verify-payment
+      // recomputes the signature server-side before marking the order paid.
+      try {
+        const created = await createRealOrder({
+          lines,
+          customerName: name,
+          customerEmail: email,
+          customerPhone: phone,
+          shippingAddress,
+          billingAddress,
+          isGift,
+          giftMessage,
+          recipientName,
+          giftWrapRequested: giftWrap,
+          buyerGstin,
+        });
+
+        const paymentResponse = await openRazorpayCheckout({
+          keyId: created.razorpay_key_id,
+          razorpayOrderId: created.razorpay_order_id,
+          customerName: name,
+          customerEmail: email,
+          customerPhone: phone,
+        });
+
+        const verified = await verifyRealPayment(paymentResponse);
+
+        // The confirmation page can't re-fetch this order itself — orders
+        // are admin-only by RLS (see backend/migrations/0002_rls_policies.sql),
+        // and the only public order lookup (track-order) deliberately
+        // returns just status/tracking, never the receipt. The browser
+        // that just placed and paid for this order already legitimately
+        // knows everything below, so it's handed forward via sessionStorage
+        // instead of re-fetched.
+        const receipt = {
+          order_number: created.order_number,
+          items: lines.map((l) => ({
+            product_name: l.product.name,
+            variant_name: l.variant?.name,
+            quantity: l.quantity,
+            line_total_inr: (l.variant?.price_inr ?? l.product.price_inr) * l.quantity,
+          })),
+          subtotal_inr: subtotalInr,
+          tax_rate_percent: siteSettings.tax_rate_percent,
+          tax_amount_inr: taxAmountInr,
+          shipping_fee_inr: shippingFeeInr,
+          total_inr: created.total_inr,
+          gst_invoice_number: verified.gst_invoice_number,
+          is_gift: isGift,
+          recipient_name: recipientName || undefined,
+          gift_message: giftMessage || undefined,
+          gift_wrap_requested: giftWrap,
+          shipping_city: shipping.city,
+        };
+        sessionStorage.setItem(`bougsk-order-confirmation:${created.order_number}`, JSON.stringify(receipt));
+
+        track("payment_successful", { order_number: created.order_number, total_inr: created.total_inr });
+        clearCart();
+        router.push(`/order-confirmation/${created.order_number}`);
+      } catch (err) {
+        setSubmitting(false);
+        if (err instanceof RazorpayDismissedError) {
+          showToast("error", "Payment was not completed. Your cart is still here whenever you're ready.");
+        } else {
+          showToast("error", err instanceof Error ? err.message : "Something went wrong placing your order.");
+        }
+      }
+      return;
+    }
+
+    // Local dev fallback — no Supabase project connected, so this calls a
+    // Server Action that re-prices against a shared local JSON file instead
+    // of a real database — see lib/serverOrders.ts.
     const order = await createOrderAction({
       lines,
       customerName: name,
       customerEmail: email,
       customerPhone: phone,
-      shippingAddress: { line1: shipping.line1, line2: shipping.line2 || undefined, city: shipping.city, state: shipping.state, pincode: shipping.pincode },
-      billingAddress: billingDiffers
-        ? { line1: billing.line1, line2: billing.line2 || undefined, city: billing.city, state: billing.state, pincode: billing.pincode }
-        : undefined,
+      shippingAddress,
+      billingAddress,
       isGift,
       giftMessage,
       recipientName,
@@ -290,9 +365,11 @@ export default function CheckoutPage() {
               Returns &amp; refund policy
             </Link>
           </div>
-          <p className="mb-3 text-xs text-ink/50">
-            Test checkout — no payment gateway is connected yet, so no real payment is processed.
-          </p>
+          {!isSupabaseConfigured && (
+            <p className="mb-3 text-xs text-ink/50">
+              Test checkout — no payment gateway is connected yet, so no real payment is processed.
+            </p>
+          )}
           <Button
             type="submit"
             className="w-full"

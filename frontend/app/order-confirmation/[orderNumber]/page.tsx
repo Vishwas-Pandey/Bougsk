@@ -1,3 +1,6 @@
+"use client";
+
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { getOrderByNumberAction } from "@/lib/serverOrders";
 import { formatCurrency } from "@/lib/formatCurrency";
@@ -5,15 +8,97 @@ import { ButtonLink } from "@/components/Button";
 import { FlameGlyph } from "@/components/FlameGlyph";
 import { siteSettings } from "@/lib/mockData";
 
-export default async function OrderConfirmationPage({
+interface ReceiptItem {
+  product_name: string;
+  variant_name?: string;
+  quantity: number;
+  line_total_inr: number;
+}
+
+interface Receipt {
+  order_number: string;
+  items: ReceiptItem[];
+  subtotal_inr: number;
+  tax_rate_percent: number;
+  tax_amount_inr: number;
+  shipping_fee_inr: number;
+  total_inr: number;
+  gst_invoice_number?: string;
+  is_gift: boolean;
+  recipient_name?: string;
+  gift_message?: string;
+  gift_wrap_requested: boolean;
+  shipping_city: string;
+}
+
+// The real checkout flow hands its receipt forward via sessionStorage —
+// orders are admin-only by RLS, and the one public order lookup
+// (track-order) deliberately returns just status/tracking, never a full
+// receipt (see lib/realCheckout.ts). The local mock flow has no such
+// restriction, so it's still fetched directly as a fallback.
+function readStoredReceipt(orderNumber: string): Receipt | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = sessionStorage.getItem(`bougsk-order-confirmation:${orderNumber}`);
+    return raw ? (JSON.parse(raw) as Receipt) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export default function OrderConfirmationPage({
   params,
 }: {
   params: Promise<{ orderNumber: string }>;
 }) {
-  const { orderNumber } = await params;
-  const order = await getOrderByNumberAction(orderNumber);
+  const { orderNumber } = use(params);
+  // Lazy initializer, not an effect: sessionStorage is read synchronously
+  // during the client render, so a real order's own receipt never
+  // flashes the async mock-fallback lookup below before appearing.
+  const [receipt, setReceipt] = useState<Receipt | null | undefined>(() =>
+    readStoredReceipt(orderNumber),
+  );
 
-  if (!order) {
+  useEffect(() => {
+    if (receipt !== undefined) return;
+    let cancelled = false;
+    getOrderByNumberAction(orderNumber).then((order) => {
+      if (cancelled) return;
+      if (!order) {
+        setReceipt(null);
+        return;
+      }
+      setReceipt({
+        order_number: order.order_number,
+        items: order.items.map((item) => ({
+          product_name: item.product_name,
+          variant_name: item.variant_name,
+          quantity: item.quantity,
+          line_total_inr: item.line_total_inr,
+        })),
+        subtotal_inr: order.subtotal_inr,
+        tax_rate_percent: order.tax_rate_percent,
+        tax_amount_inr: order.tax_amount_inr,
+        shipping_fee_inr: order.shipping_fee_inr,
+        total_inr: order.total_inr,
+        gst_invoice_number: order.gst_invoice_number,
+        is_gift: order.is_gift,
+        recipient_name: order.recipient_name,
+        gift_message: order.gift_message,
+        gift_wrap_requested: order.gift_wrap_requested,
+        shipping_city: order.shipping_address.city,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderNumber, receipt]);
+
+  if (receipt === undefined) {
+    return <div className="mx-auto max-w-2xl px-4 py-24 sm:px-6" />;
+  }
+
+  if (receipt === null) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-24 text-center sm:px-6">
         <p className="font-display text-2xl text-ink">We can&apos;t find that order.</p>
@@ -28,6 +113,7 @@ export default async function OrderConfirmationPage({
     );
   }
 
+  const order = receipt;
   const whatsappMessage = `Hi Bougsk, I have a question about order ${order.order_number}.`;
   const whatsappHref = `https://wa.me/${siteSettings.whatsapp_number}?text=${encodeURIComponent(whatsappMessage)}`;
 
@@ -87,7 +173,7 @@ export default async function OrderConfirmationPage({
       )}
 
       <p className="mt-6 text-center text-sm text-ink/70">
-        Expected delivery in {siteSettings.delivery_estimate_days}, to {order.shipping_address.city}.
+        Expected delivery in {siteSettings.delivery_estimate_days}, to {order.shipping_city}.
       </p>
 
       <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
